@@ -1,0 +1,109 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Create IDUN EKS Tenant Admin Role and User'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+  EKSClusterArn:
+    Type: String
+
+Resources:
+  IDUNEKSTenantAdminRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['-', [!Ref EnvironmentName, AdminRole]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: ebsaccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: "*"
+                Action:
+                  - "ebs:*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEKSVPCResourceController
+      Path: /
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  CICDGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      GroupName: !Join ['-', [!Ref EnvironmentName, CICD, Group]]
+      Policies:
+        - PolicyName: eks-cluster-access
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Ref EKSClusterArn
+                Action:
+                  - "eks:DescribeNodegroup"
+                  - "eks:ListNodegroups"
+                  - "eks:UntagResource"
+                  - "eks:ListUpdates"
+                  - "eks:DescribeUpdate"
+                  - "eks:TagResource"
+                  - "eks:DescribeCluster"
+        - PolicyName: assume-role
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !GetAtt IDUNEKSTenantAdminRole.Arn
+                Action:
+                  - "sts:AssumeRole"
+
+  CICDUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: !Join ['-', [!Ref EnvironmentName, cicd, user]]
+      Groups:
+        - !Ref CICDGroup
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  CICDUserAccessKeys:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref CICDUser
+      Serial: 1
+      Status: Active
+
+Outputs:
+  CICDUserName:
+    Description: Name of CICD User
+    Value: !Ref CICDUser
+
+  CICDUserArn:
+    Description: ARN of CICD User
+    Value: !GetAtt CICDUser.Arn
+
+  CICDUserAccessKeyId:
+    Description: Access Key ID of CICD User
+    Value: !Ref CICDUserAccessKeys
+
+  CICDUserSecretAccessKey:
+    Description: Secret Access Key of CICD User
+    Value: !GetAtt CICDUserAccessKeys.SecretAccessKey
+
+  AdminRoleArn:
+    Description: ARN of Tenant Admin Role
+    Value: !GetAtt IDUNEKSTenantAdminRole.Arn

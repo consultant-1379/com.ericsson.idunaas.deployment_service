@@ -1,0 +1,150 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IDUN VPC - Private and Public subnets'
+
+Parameters:
+  VPCID:
+    Type: String
+    Description: VPC ID
+  NumPrivateSubnets:
+    Type: String
+    Description: Number of Private Subnets
+  PrivateSubnet01Id:
+    Type: String
+    Description: Private Subnet 01 ID
+  PrivateSubnet02Id:
+    Type: String
+    Description: Private Subnet 02 ID
+  PrivateSubnet01Az:
+    Type: String
+    Description: Private Subnet 01 Availability Zone
+  PrivateSubnet02Az:
+    Type: String
+    Description: Private Subnet 02 Availability Zone
+  PrimaryVpcCIDR:
+    Type: String
+    Description: The CIDR range for the VPC. This should be a valid private (RFC 1918) CIDR range.
+  SecondaryVpcCIDR:
+    Type: String
+    Description: The CIDR range for the VPC. This should be a valid private (RFC 1918) CIDR range.
+  EnvironmentName:
+    Type: String
+    Description: "A unique environment name that is prefixed to resource names"
+
+Conditions:
+  CreateSecondSubnet: !Equals [!Ref NumPrivateSubnets, '2']
+
+Resources:
+  SecondaryCidr:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      CidrBlock: !Ref SecondaryVpcCIDR
+      VpcId: !Ref VPCID
+
+  PodRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCID
+
+  PodSubnet01:
+    DependsOn:
+    - SecondaryCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCID
+      AvailabilityZone: !Ref PrivateSubnet01Az
+      CidrBlock: !If [CreateSecondSubnet, !Select [ 0, !Cidr [ !Ref SecondaryVpcCIDR, 2, 9 ]], !Ref SecondaryVpcCIDR]
+      Tags:
+      - Key: Name
+        Value: !Join ['-', [!Ref EnvironmentName, PodSubnet01]]
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  PodSubnet02:
+    DependsOn:
+    - SecondaryCidr
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPCID
+      AvailabilityZone: !Ref PrivateSubnet02Az
+      CidrBlock: !Select [ 1, !Cidr [ !Ref SecondaryVpcCIDR, 2, 9 ]]
+      Tags:
+      - Key: Name
+        Value: !Join ['-', [!Ref EnvironmentName, PodSubnet02]]
+      - Key: Environment
+        Value: !Ref EnvironmentName
+    Condition: "CreateSecondSubnet"
+
+  PodSubnet01RouteTableAssociation:
+    DependsOn:
+    - PodSubnet01
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet01
+      RouteTableId: !Ref PodRouteTable
+
+  PodSubnet02RouteTableAssociation:
+    DependsOn:
+    - PodSubnet02
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet02
+      RouteTableId: !Ref PodRouteTable
+    Condition: "CreateSecondSubnet"
+
+  ControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cluster communication with worker nodes
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  PodSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Communication between PODs
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref PrimaryVpcCIDR
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref SecondaryVpcCIDR
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+Outputs:
+  VpcId:
+    Description: The VPC Id
+    Value: !Ref VPCID
+
+  PrivateSubnetIds:
+    Description: Subnets IDs in the VPC
+    Value: !If [CreateSecondSubnet, !Join [ ",", [ !Ref PrivateSubnet01Id, !Ref PrivateSubnet02Id ] ], !Join [ ",", [ !Ref PrivateSubnet01Id] ]]
+
+  SecurityGroups:
+    Description: Security group for the cluster control plane communication with worker nodes
+    Value: !Join [ ",", [ !Ref ControlPlaneSecurityGroup ] ]
+
+  PodSecurityGroupId:
+    Description: Security Group Id for PODs
+    Value: !GetAtt PodSecurityGroup.GroupId
+
+  PodSubnetIds:
+    Description: Subnet IDs of POD Subnets in Secondary VPC CIDR
+    Value: !If [CreateSecondSubnet, !Join [ ",", [ !Ref PodSubnet01, !Ref PodSubnet02 ] ], !Join [ ",", [ !Ref PodSubnet01] ]]
+
+  PodSubnetAzs:
+    Description: Availability Zones for POD Subnets
+    Value: !If [CreateSecondSubnet, !Join [ ",", [ !GetAtt PodSubnet01.AvailabilityZone, !GetAtt PodSubnet02.AvailabilityZone ] ], !Join [ ",", [ !GetAtt PodSubnet01.AvailabilityZone] ]]

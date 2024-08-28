@@ -1,0 +1,130 @@
+modelVersion: 2.0
+
+description: "EIAPaaS: Common ruleset for Team Muon EIAPaaS Deployment Manager"
+
+docker-images:
+  - deployment-service: armdocker.rnd.ericsson.se/proj-idun-aas/com.ericsson.oss.idunaas.deployment.service:latest
+  - precode-review: com.ericsson.oss.idunaas.deployment.service.precode.review:latest
+  - localstack: armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/localstack/localstack:0.12.10
+  - bump-version: armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/treeder/bump:1.2.11
+
+properties:
+  - deployment-service-image-name: com.ericsson.oss.idunaas.deployment.service
+  - precode-review-image-name: com.ericsson.oss.idunaas.deployment.service.precode.review
+
+var:
+  - deployment-service-image-id
+  - precode-review-image-id
+
+env:
+  - PWD
+  - WORKSPACE
+  - IMAGE_VERSION
+  - GIT_COMMIT
+  - GERRIT_REFSPEC
+  - CHANGED_PYTHON_FILES
+  - CHANGED_DOCKERFILE
+
+rules:
+  bump-service-version:
+    - task: Bump Version file
+      docker-image: bump-version
+      docker-flags:
+        - "--workdir /app"
+      docker-mounts:
+        - "${env.PWD}:/app"
+      cmd: --filename ./VERSION patch
+    - task: Expose version in artifact.properties
+      cmd: cat "./VERSION" > ${env.WORKSPACE}/artifact.properties
+
+  push-changes-to-version-file:
+    - task: Git add
+      cmd: git add ./VERSION
+    - task: Git commit
+      cmd: git commit -m "Version ${env.IMAGE_VERSION}"
+    - task: Git tag
+      cmd: git tag -a "${env.IMAGE_VERSION}" -m "version ${env.IMAGE_VERSION}"
+    - task: Git rebase
+      cmd: git rebase HEAD gcn/master
+    - task: Git push to master
+      cmd: git push gcn HEAD:master
+    - task: Git push tags
+      cmd: git push --tags gcn
+
+  build-deployment-service:
+    - task: Build Deployment Service image
+      cmd: docker build --target "released_image" -t armdocker.rnd.ericsson.se/proj-idun-aas/${deployment-service-image-name}:${env.IMAGE_VERSION} .
+    - task: Get Deployment Service image ID
+      cmd: docker images armdocker.rnd.ericsson.se/proj-idun-aas/${deployment-service-image-name} -q > .bob/var.deployment-service-image-id
+    - task: Tag Deployment Service image as latest
+      cmd: docker tag ${var.deployment-service-image-id} armdocker.rnd.ericsson.se/proj-idun-aas/${deployment-service-image-name}:latest
+
+  publish-deployment-service:
+    - task: Publish Deployment Service with specific version
+      cmd: docker push armdocker.rnd.ericsson.se/proj-idun-aas/${deployment-service-image-name}:${env.IMAGE_VERSION}
+    - task: Publish Deployment Service with latest version
+      cmd: docker push armdocker.rnd.ericsson.se/proj-idun-aas/${deployment-service-image-name}:latest
+
+  build-precode-image:
+    - task: Build Precode Review image
+      cmd: docker build --target "precode_review" -t com.ericsson.oss.idunaas.deployment.service.precode.review .
+    - task: Get Precode Review image ID
+      cmd: docker images com.ericsson.oss.idunaas.deployment.service.precode.review -q > .bob/var.precode-review-image-id
+
+  run-python-tests:
+    - task: Remove pre-existing Localstack container
+      cmd: docker rm -f $(docker ps | grep localstack | awk '{ print $1 }') || true
+    - task: Initialize Localstack container
+      docker-image: localstack
+      docker-flags:
+        - "--network host"
+        - "--user 0:0"
+        - "-d"
+        - "-e DEFAULT_REGION='eu-west-1'"
+      cmd: echo "Done"
+    - task: Wait for Localstack
+      cmd: sleep 10
+    - task: Run Pytest
+      docker-image: precode-review
+      docker-flags:
+        - "--network host"
+        - "--workdir /workdir"
+      docker-mounts:
+        - "${env.PWD}:/workdir"
+      cmd: coverage run --source aws_deployment_manager -m pytest -v --ignore=bob
+    - task: Generate Pytest coverage report
+      docker-image: precode-review
+      docker-flags:
+        - "--workdir /workdir"
+      docker-mounts:
+        - "${env.PWD}:/workdir"
+      cmd: coverage report
+
+  remove-precode-image:
+    - task: Remove Precode Review image
+      cmd: docker rmi -f ${var.precode-review-image-id}
+
+  remove-localstack:
+    - task: Remove Localstack
+      cmd: docker rm -f $(docker ps | grep localstack | awk '{ print $1 }') || true
+
+  idunaas-deployment-linting:
+    - task: Run Pylint
+      docker-image: precode-review
+      cmd: pylint --exit-zero aws_deployment_manager/*
+    - task: Run flake8
+      docker-image: precode-review
+      cmd: flake8 --exit-zero --exclude bob .
+
+  lint-changed-files:
+    - task: Lint changed files
+      docker-image: precode-review
+      cmd: pylint --persistent=no ${env.CHANGED_PYTHON_FILES}
+
+  git-clean:
+    - task: Git clean
+      cmd: docker run --rm -v ${env.PWD}:/git/ armdocker.rnd.ericsson.se/dockerhub-ericsson-remote/alpine/git:v2.32.0 clean -xdff
+
+  delete-images-excluding-grafana:
+    - task: Clean up Docker images
+      cmd: bash -c 'scripts/clean_up_images_on_slave.sh'

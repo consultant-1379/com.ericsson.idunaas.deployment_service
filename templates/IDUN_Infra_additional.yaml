@@ -1,0 +1,145 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AMP Setup'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: A unique environment name that is prefixed to resource names
+  EKSClusterOIDC:
+    Type: String
+    Description: EKS Cluster OpenId Connection URL
+  ServiceAccountNamespace:
+    Type: String
+    Description: Namespace where the serviceaccount will be created
+    Default: prometheus
+  IngestServiceAccountName:
+    Type: String
+    Description: Serviceaccount name
+    Default: amp-iamproxy-ingest-service-account
+#  QueryServiceAccountName:
+#    Type: String
+#    Description: Serviceaccount name
+#    Default: amp-iamproxy-query-service-account
+
+
+Resources:
+
+  AmpWorkspace:
+    Type: AWS::APS::Workspace
+    Properties:
+      Alias: !Ref EnvironmentName
+      Tags:
+      - Key: Name
+        Value: !Ref EnvironmentName
+
+  IngestPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Join ['-', [!Ref EnvironmentName, AMPIngestPolicy]]
+      PolicyDocument: |
+         {
+           "Version": "2012-10-17",
+            "Statement": [
+                {"Effect": "Allow",
+                 "Action": [
+                    "aps:RemoteWrite",
+                    "aps:GetSeries",
+                    "aps:GetLabels",
+                    "aps:GetMetricMetadata"
+                 ],
+                 "Resource": "*"
+               }
+            ]
+         }
+
+
+  IngestRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['-', [!Ref EnvironmentName, amp-iamproxy-ingest-role]]
+      ManagedPolicyArns:
+        - !Ref IngestPolicy
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+           "Version": "2012-10-17",
+           "Statement": [
+               {
+                   "Condition": {
+                       "StringEquals": {
+                         "oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}:sub": "system:serviceaccount:${SaNamespace}:${SaName}"
+                       }
+                   },
+                   "Action": "sts:AssumeRoleWithWebIdentity",
+                   "Effect": "Allow",
+                   "Principal": {
+                       "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}"
+                   }
+               }
+           ]
+          }
+        - EKSClusterOIDC: !Ref EKSClusterOIDC
+          SaNamespace: !Ref ServiceAccountNamespace
+          SaName: !Ref IngestServiceAccountName
+
+#  QueryPolicy:
+#    Type: AWS::IAM::ManagedPolicy
+#    Properties:
+#      ManagedPolicyName: !Join ['-', [!Ref EnvironmentName, AMPQueryPolicy]]
+#      PolicyDocument: |
+#         {
+#           "Version": "2012-10-17",
+#            "Statement": [
+#                {"Effect": "Allow",
+#                 "Action": [
+#                    "aps:QueryMetrics",
+#                    "aps:GetSeries",
+#                    "aps:GetLabels",
+#                    "aps:GetMetricMetadata"
+#                 ],
+#                 "Resource": "*"
+#               }
+#            ]
+#         }
+#
+#  QueryRole:
+#    Type: AWS::IAM::Role
+#    Properties:
+#      RoleName: !Join ['-', [!Ref EnvironmentName, amp-iamproxy-query-role]]
+#      ManagedPolicyArns:
+#        - !Ref QueryPolicy
+#      AssumeRolePolicyDocument: !Sub
+#        - |
+#          {
+#           "Version": "2012-10-17",
+#           "Statement": [
+#               {
+#                   "Condition": {
+#                       "StringEquals": {
+#                         "oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}:sub": "system:serviceaccount:${SaNamespace}:${SaName}"
+#                       }
+#                   },
+#                   "Action": "sts:AssumeRoleWithWebIdentity",
+#                   "Effect": "Allow",
+#                   "Principal": {
+#                       "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}"
+#                   }
+#               }
+#           ]
+#          }
+#        - EKSClusterOIDC: !Ref EKSClusterOIDC
+#          SaNamespace: !Ref ServiceAccountNamespace
+#          SaName: !Ref QueryServiceAccountName
+
+Outputs:
+  AmpWorkspaceUrl:
+    Description: AWS Endpoint for writing data in AMP Workspace
+    Value: !GetAtt AmpWorkspace.PrometheusEndpoint
+  AmpIngestRoleArn:
+    Description: ARN of the IAM Role for ingesting data in AMP Workspace
+    Value: !GetAtt IngestRole.Arn
+#  AmpQueryRoleArn:
+#    Description: ARN of the IAM Role for querying data in AMP Workspace
+#    Value: !GetAtt QueryRole.Arn
+

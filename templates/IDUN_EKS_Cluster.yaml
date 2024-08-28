@@ -1,0 +1,51 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IDUN EKS Cluster Setup'
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: "A unique environment name that is prefixed to resource names"
+  ClusterRoleArn:
+    Type: String
+    Description: The role that Amazon EKS will use to create AWS resources for Kubernetes clusters
+  SecurityGroup:
+    Type: String
+  ControlPlaneSubnetIds:
+    Type: String
+  KMSKeyArn:
+    Type: "String"
+  K8SVersion:
+    Type: String
+
+Resources:
+  IDUNEKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: !Join ['-', [!Ref EnvironmentName, EKS, Cluster]]
+      Version: !Ref K8SVersion
+      RoleArn: !Ref ClusterRoleArn
+      EncryptionConfig:
+        - Provider:
+            KeyArn: !Ref KMSKeyArn
+          Resources:
+            - 'secrets'
+      KubernetesNetworkConfig:
+        ServiceIpv4Cidr: 192.168.0.0/16
+      ResourcesVpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroup
+        SubnetIds: !Split [",", !Ref ControlPlaneSubnetIds]
+
+Outputs:
+  ClusterName:
+    Description: Name of IDUN EKS Cluster
+    Value: !Join ['-', [!Ref EnvironmentName, EKS, Cluster]]
+
+  ClusterArn:
+    Description: ARN of IDUN EKS Cluster
+    Value: !GetAtt IDUNEKSCluster.Arn
+
+  ClusterOIDC:
+    Description: OIDC URL of the EKS Cluster
+    Value: !Select [4, !Split ["/", !GetAtt IDUNEKSCluster.OpenIdConnectIssuerUrl]]

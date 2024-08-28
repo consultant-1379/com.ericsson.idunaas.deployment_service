@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: "Create IDUN Infrastructure CSI"
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: A unique environment name that is prefixed to resource names
+  AWSRegion:
+    Type: String
+    Description: Region of the cluster
+  EKSClusterOIDC:
+    Type: String
+    Description: EKS Cluster OpenId Connection URL
+  EBSKMSKeyArn:
+    Type: String
+    Description: ARN of KMS Key for EBS Encryption
+
+Resources:
+  IDUNCSIControllerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join [ '-', [ !Ref EnvironmentName, AmazonEKSCSIControllerRole ] ]
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+           "Version": "2012-10-17",
+           "Statement": [
+               {
+                   "Condition": {
+                       "StringEquals": {
+                         "oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}:aud": "sts.amazonaws.com",
+                         "oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}:sub": "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+                       }
+                   },
+                   "Action": "sts:AssumeRoleWithWebIdentity",
+                   "Effect": "Allow",
+                   "Principal": {
+                       "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/oidc.eks.${AWS::Region}.amazonaws.com/id/${EKSClusterOIDC}"
+                   }
+               }
+           ]
+          }
+        - EKSClusterOIDC: !Ref EKSClusterOIDC
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+  IDUNCSIKmsKeyPolicy:
+    DependsOn:
+    -  IDUNCSIControllerRole
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ '-', [ !Ref EnvironmentName, EbsKmsKeyForEncryptionIAMPolicy ]]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: !Ref EBSKMSKeyArn
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: 'true'
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: !Ref EBSKMSKeyArn
+      Roles:
+        - !Ref IDUNCSIControllerRole
+
+Outputs:
+  CSIControllerRoleARN:
+    Description: The ARN of the IAM Role to be used by the service account of the CSI Controller
+    Value: !GetAtt IDUNCSIControllerRole.Arn

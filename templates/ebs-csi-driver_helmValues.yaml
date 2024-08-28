@@ -1,0 +1,48 @@
+image:
+  repository: EBS_CSI_REGISTRY/ebs-csi-driver/aws-ebs-csi-driver
+  # Overrides the image tag whose default is v{{ .Chart.AppVersion }}
+  tag: "v1.19.0"
+
+sidecars:
+  provisioner:
+    image:
+      repository: EBS_CSI_REGISTRY/eks-distro/kubernetes-csi/external-provisioner
+      tag: "v3.5.0-eks-1-27-3"
+  attacher:
+    image:
+      repository: EBS_CSI_REGISTRY/eks-distro/kubernetes-csi/external-attacher
+      tag: "v4.3.0-eks-1-27-3"
+  snapshotter:
+    image:
+      repository: EBS_CSI_REGISTRY/eks-distro/kubernetes-csi/external-snapshotter/csi-snapshotter
+      tag: "v6.2.1-eks-1-27-3"
+  livenessProbe:
+    image:
+      repository: EBS_CSI_REGISTRY/eks-distro/kubernetes-csi/livenessprobe
+      tag: "v2.10.0-eks-1-27-3"
+  resizer:
+    image:
+      repository: EBS_CSI_REGISTRY/eks-distro/kubernetes-csi/external-resizer
+      tag: "v1.8.0-eks-1-27-3"
+  nodeDriverRegistrar:
+    image:
+      repository: EBS_CSI_REGISTRY/eks-distro/kubernetes-csi/node-driver-registrar
+      tag: "v2.8.0-eks-1-27-3"
+  volumemodifier:
+    image:
+      repository: EBS_CSI_REGISTRY/ebs-csi-driver/volume-modifier-for-k8s
+      tag: "v0.1.0"
+
+controller:
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: CSI_CONTROLLER_ROLE_ARN
+
+node:
+  # The "maximum number of attachable volumes" per node
+  volumeAttachLimit: 22
+
+# Use old CSIDriver without an fsGroupPolicy set
+# Intended for use with older clusters that cannot easily replace the CSIDriver object
+# This parameter should always be false for new installations
+useOldCSIDriver: true

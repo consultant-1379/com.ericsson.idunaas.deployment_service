@@ -1,0 +1,177 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IDUN Base VPC Setup'
+
+Parameters:
+  VPCID:
+    Type: String
+    Description: VPC ID
+  PrivateSubnet01Id:
+    Type: String
+    Description: Private Subnet 01 ID
+  PrivateSubnet02Id:
+    Type: String
+    Description: Private Subnet 02 ID
+  PrivateRouteTable01:
+    Type: String
+    Description: Route Table associated with Private Subnet 01
+  PrivateRouteTable02:
+    Type: String
+    Description: Route Table associated with Private Subnet 01
+  PrimaryVpcCIDR:
+    Type: String
+    Description: The CIDR range for the VPC. This should be a valid private (RFC 1918) CIDR range.
+  EnvironmentName:
+    Type: String
+    Description: "A unique environment name that is prefixed to resource names"
+
+Resources:
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group to govern who can access the endpoints
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref PrimaryVpcCIDR
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+# No support for Tags in CF for resource type AWS::EC2::VPCEndpoint:
+# https://github.com/aws-cloudformation/cloudformation-coverage-roadmap/issues/196
+
+  S3APIEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable01
+        - !Ref PrivateRouteTable02
+      VpcId: !Ref VPCID
+
+  ECRAPIEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.api"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  ECRDockerEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  EC2Endpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  CWLogsEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  CWExporterEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.monitoring"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  STSEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sts"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  AutoScalingEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.autoscaling"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  ELBEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.elasticloadbalancing"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+  EBSEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ebs"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !GetAtt EndpointSecurityGroup.GroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
+Outputs:
+  EndpointSecurityGroupId:
+    Description: AWS Endpoint Security Group ID
+    Value: !GetAtt EndpointSecurityGroup.GroupId
+

@@ -1,0 +1,3 @@
+[submodule "bob"]
+	path = bob
+	url = ssh://gerrit.ericsson.se:29418/adp-cicd/bob

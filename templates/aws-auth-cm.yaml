@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    - rolearn: arn:aws:iam::AWS_ACCOUNT_ID:role/SAML-admin
+      username: consoleuser
+      groups:
+        - system:masters
+    - rolearn: arn:aws:iam::AWS_ACCOUNT_ID:role/SSO-CONSUMER-ADMIN
+      username: consoleuser
+      groups:
+        - system:masters

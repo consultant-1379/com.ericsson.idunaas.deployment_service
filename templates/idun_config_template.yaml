@@ -1,0 +1,60 @@
+# Name of IDUN Deployment. This name should be unique within AWS account
+EnvironmentName : ""
+
+# AWS Region. For now, only eu-west-1 is supported
+AWSRegion: "eu-west-1"
+
+# Version of Kubernetes. Supported values are 1.18, 1.19. Always use latest version
+K8SVersion: "1.20"
+
+# ID of Virtual Private Cloud in AWS
+VPCID : ""
+
+# Subnet IDs of Private Subnets in VPC used for deploying EKS Control Plane endpoints to worker nodes
+# Note: comma separated list (no space allowed before or after each comma).
+ControlPlaneSubnetIds: ""
+
+# Subnet ID of Private Subnet in VPC used for deploying EKS Worker Nodes or EKS Cluster
+# Note: comma separated list (no space allowed before or after each comma).
+WorkerNodeSubnetIds: ""
+
+# CIDR IP Range for POD Network
+SecondaryVpcCIDR : ""
+
+# Type of Node Instance
+# Allowed values are t3.2xlarge, t3a.2xlarge, c5.2xlarge, m5.2xlarge, m5a.2xlarge
+NodeInstanceType : "c5.2xlarge"
+
+# Size of disk volume to be attached to each worker node. Default is 20 GB
+DiskSize : 20
+
+# Number of minimum nodes in EKS Cluster
+MinNodes : 4
+
+# Number of maximum nodes in EKS Cluster
+MaxNodes : 10
+
+# EC2 Key Pair to be used for SSH into EKS Cluster Worker Nodes. Create EC2 Key Pair in AWS
+SshKeyPairName : ""
+
+# Domain name for IDUN deployment
+PrivateDomainName : ""
+
+# Kubedownscaler Installation Flag. This will suspend/resume the IDUN at defined time
+KubeDownscaler : True
+
+# DisablePublicAccess will decide whether the API Endpoint is publicly accessible
+DisablePublicAccess : True
+
+# Backup server Installation parameters
+BackupInstanceType: ""
+BackupAmiId: ""
+BackupDisk: ""
+BackupPass: ""
+
+# Host Values for User Interfaces or APIs in IDUN
+Hostnames:
+  iam: ""
+  pf: ""
+  so: ""
+  uds: ""

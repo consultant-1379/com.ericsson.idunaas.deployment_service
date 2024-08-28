@@ -1,0 +1,10 @@
+image_list:
+  calico:
+     - image: EXTRA_CALICO_CTRL_REGISTRY/calico/kube-controllers:v3.20.0
+     - image: EXTRA_CALICO_OTHER_REGISTRY/calico/node:v3.20.0
+     - image: EXTRA_CALICO_OTHER_REGISTRY/calico/typha:v3.20.0
+     - image: EXTRA_CALICO_OTHER_REGISTRY/calico/pod2daemon-flexvol:v3.20.0
+  eiap_deployment_manager:
+    - image: EXTRA_EIAP_PROJ_REGISTRY/proj-idun-aas/deployment-manager-aws:1.17.0-26
+  eiap_ci_utils:
+    - image: EXTRA_EIAP_PROJ_REGISTRY/proj-idun-aas/ci-utils:latest

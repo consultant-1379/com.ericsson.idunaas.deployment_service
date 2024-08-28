@@ -1,0 +1,13 @@
+EnvironmentName : "test-so-1"
+AWSRegion: "eu-west-1"
+VPCID : "vpc-00807c28bc36b5100"
+PrivateSubnetIds: "subnet-0d599a3c13b85647c,subnet-080c49a72f13e432d"
+SecondaryVpcCIDR : "172.32.0.0/22"
+NodeInstanceType : "t3a.xlarge"
+DiskSize : 50
+MinNodes : 8
+MaxNodes : 10
+DisablePublicAccess : False
+SshKeyPairName : "test-idun-keypair"
+ThumbPrint : ""
+KubeDownscaler : true

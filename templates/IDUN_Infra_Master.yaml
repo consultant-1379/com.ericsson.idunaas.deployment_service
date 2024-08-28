@@ -1,0 +1,262 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: "Create IDUN Infrastructure"
+
+Parameters:
+  VPCID:
+    Type: String
+    Description: VPC ID
+  NumPrivateSubnets:
+    Type: String
+    Description: Number of Private Subnets
+  PrivateSubnet01Id:
+    Type: String
+    Description: Private Subnet 01 ID
+  PrivateSubnet02Id:
+    Type: String
+    Description: Private Subnet 02 ID
+  PrivateSubnet01Az:
+    Type: String
+    Description: Private Subnet 01 Availability Zone
+  PrivateSubnet02Az:
+    Type: String
+    Description: Private Subnet 02 Availability Zone
+  ControlPlaneSubnetIds:
+    Type: String
+    Description: Subnet IDs for EKS Control Plane
+  AWSRegion:
+    Type: String
+    Description: Region of the cluster
+  EnvironmentName:
+    Type: "String"
+    Description: "A unique environment name that is prefixed to resource names"
+  PrimaryVpcCIDR:
+    Type: "String"
+    Description: "Please enter the IP range (CIDR notation) for this VPC. Mask Bits must be 16. e.g. 10.1.0.0/16"
+  SecondaryVpcCIDR:
+    Type: String
+    Description: The CIDR range for the VPC. This should be a valid private (RFC 1918) CIDR range.
+  S3URL:
+    Type: "String"
+    Description: "Base S3 URL where templates are stored"
+  NodeInstanceType:
+    Type: "String"
+    AllowedValues: [t3.medium, t3.xlarge, t3a.xlarge, t3.2xlarge, t3a.2xlarge, c5.xlarge, c5.2xlarge, c5.4xlarge, r5.large, m5.2xlarge, m5.4xlarge, m5a.2xlarge, m5.xlarge]
+    Default: t3.medium
+    Description: "EC2 Instance Type for Nodes in Node Group"
+  DiskSize:
+    Type: "Number"
+    Description: "Disk size in GB attached to each node in Node Group"
+    Default: 20
+    MinValue: 20
+    MaxValue: 200
+  MinNodes:
+    Type: "Number"
+    Description: "Minimum Number of Nodes in Node Group"
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+  MaxNodes:
+    Type: "Number"
+    Description: "Maximum Number of Nodes in Node Group"
+    Default: 2
+    MinValue: 1
+    MaxValue: 50
+  SshKeyPairName:
+    Type: "String"
+  PrivateDomainName:
+    Type: "String"
+  Hostnames:
+    Type: "String"
+  K8SVersion:
+    Type: "String"
+    AllowedValues: ['1.20', '1.21', '1.22', '1.23', '1.24']
+  KubeDownscaler:
+    Type: "String"
+  DisablePublicAccess:
+    Type: "String"
+Conditions:
+  CreateSecondSubnet: !Equals [!Ref NumPrivateSubnets, '2']
+
+Resources:
+  EBSKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: 'KMS key for EBS encryption'
+      Enabled : true
+      EnableKeyRotation: true
+      PendingWindowInDays: 7
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: custom-ebs-1
+        Statement:
+        - Sid: Enable IAM User Permissions
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action: kms:*
+          Resource: "*"
+        - Sid: Allow access to key
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey*
+          - kms:CreateGrant
+          - kms:DescribeKey
+          Resource: "*"
+        - Sid: Allow direct access to key metadata to the account
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - kms:Describe*
+          - kms:Get*
+          - kms:List*
+          - kms:RevokeGrant
+          Resource: "*"
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  IDUNEKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['-', [!Ref EnvironmentName, ClusterRole]]
+      Policies:
+      - PolicyName: "ec2describeaccess"
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Effect: "Allow"
+            Action:
+              - 'ec2:Describe*'
+            Resource: "*"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - eks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  IDUNEKSNodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['-', [!Ref EnvironmentName, NodeRole]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Tags:
+      - Key: Environment
+        Value: !Ref EnvironmentName
+
+  VPCStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['/', [!Ref S3URL, IDUN_VPC.yaml]]
+      Parameters:
+        VPCID: !Ref VPCID
+        NumPrivateSubnets: !Ref NumPrivateSubnets
+        PrivateSubnet01Id: !Ref PrivateSubnet01Id
+        PrivateSubnet02Id: !Ref PrivateSubnet02Id
+        PrivateSubnet01Az: !Ref PrivateSubnet01Az
+        PrivateSubnet02Az: !Ref PrivateSubnet02Az
+        PrimaryVpcCIDR: !Ref PrimaryVpcCIDR
+        SecondaryVpcCIDR: !Ref SecondaryVpcCIDR
+        EnvironmentName: !Ref EnvironmentName
+
+  EKSClusterStack:
+    DependsOn:
+    - VPCStack
+    - IDUNEKSClusterRole
+    - IDUNEKSNodeRole
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Join ['/', [!Ref S3URL, IDUN_EKS_Cluster.yaml]]
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        ClusterRoleArn: !GetAtt IDUNEKSClusterRole.Arn
+        SecurityGroup: !GetAtt VPCStack.Outputs.SecurityGroups
+        ControlPlaneSubnetIds: !Ref ControlPlaneSubnetIds
+        KMSKeyArn: !GetAtt EBSKMSKey.Arn
+        K8SVersion: !Ref K8SVersion
+
+
+Outputs:
+  VpcId:
+    Description: The VPC Id
+    Value: !Ref VPCID
+
+  PrivateSubnetIds:
+    Description: Private Subnets IDs in the VPC
+    Value: !GetAtt VPCStack.Outputs.PrivateSubnetIds
+
+  SecurityGroups:
+    Description: Security group for the cluster control plane communication with worker nodes
+    Value: !GetAtt VPCStack.Outputs.SecurityGroups
+
+  PodSecurityGroupId:
+    Description: Security Group Id for PODs
+    Value: !GetAtt VPCStack.Outputs.PodSecurityGroupId
+
+  PodSubnetIds:
+    Description: Subnet IDs of POD Subnets in Secondary VPC CIDR
+    Value: !GetAtt VPCStack.Outputs.PodSubnetIds
+
+  PodSubnetAzs:
+    Description: Availability Zones for POD Subnets
+    Value: !GetAtt VPCStack.Outputs.PodSubnetAzs
+
+  EKSClusterName:
+    Description: Name of IDUN EKS Cluster
+    Value: !GetAtt EKSClusterStack.Outputs.ClusterName
+
+  EKSClusterArn:
+    Description: ARN of IDUN EKS Cluster
+    Value: !GetAtt EKSClusterStack.Outputs.ClusterArn
+
+  EKSClusterOIDC:
+    Description: OIDC URL of EKS Cluster
+    Value: !GetAtt EKSClusterStack.Outputs.ClusterOIDC
+
+  EBSKMSKeyArn:
+    Description : ARN of KMS Key for EBS Encryption
+    Value: !GetAtt EBSKMSKey.Arn
+
+  AWSAccountId:
+    Description : AWS Account ID
+    Value: !Ref AWS::AccountId
+
+  Hostnames:
+    Description: IDUN Hostnames
+    Value: !Ref Hostnames
+
+  PrivateDomainName:
+    Description: IDUN Private DNS Hosted Zone Name
+    Value: !Ref PrivateDomainName
+
+  NodeRoleArn:
+    Description: ARN of Node Role
+    Value: !GetAtt IDUNEKSNodeRole.Arn

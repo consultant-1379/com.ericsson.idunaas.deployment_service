@@ -1,0 +1,6 @@
+[flake8]
+# Maximum number of characters on a single line.
+max-line-length = 120
+
+# Maximum complexity allowed
+max-complexity = 10

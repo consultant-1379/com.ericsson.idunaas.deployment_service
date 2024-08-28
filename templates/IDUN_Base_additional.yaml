@@ -1,0 +1,34 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AMP Setup'
+
+Parameters:
+  VPCID:
+    Type: String
+    Description: VPC ID
+  PrivateSubnet01Id:
+    Type: String
+    Description: Private Subnet 01 ID
+  PrivateSubnet02Id:
+    Type: String
+    Description: Private Subnet 02 ID
+  EndpointSecurityGroupId:
+    Type: String
+    Description: AWS Endpoint Security Group ID
+
+
+Resources:
+
+  AmpEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.aps-workspaces"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroupId
+      SubnetIds:
+        - !Ref PrivateSubnet01Id
+        - !Ref PrivateSubnet02Id
+      VpcId: !Ref VPCID
+
